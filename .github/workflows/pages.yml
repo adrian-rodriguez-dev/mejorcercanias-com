@@ -1,0 +1,52 @@
+name: Publish domain redirects
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Sync actual SEO routes
+        if: github.event_name != 'pull_request'
+        run: npm run sync
+      - run: npm test
+      - run: npm run build
+      - uses: actions/configure-pages@v5
+        if: github.event_name != 'pull_request'
+      - uses: actions/upload-pages-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          path: dist
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject outdated publication
+        env:
+          EXPECTED: ${{ github.sha }}
+        run: test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$EXPECTED"
+      - uses: actions/deploy-pages@v4
+        id: deployment
